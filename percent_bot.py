@@ -109,19 +109,28 @@ def send_kakao_memo(top1, script_dir):
     실패 시 원인을 상세히 출력합니다. (보낸 척하지 않고 명확한 에러 내용 표시)
     """
     env_path = os.path.join(script_dir, ".env")
-    if not os.path.exists(env_path):
-        print("\n❌ [카카오톡 알림 전송 실패] 프로젝트 폴더에서 .env 파일을 찾을 수 없습니다.", file=sys.stderr)
-        print(f"   • 예상 경로: {env_path}", file=sys.stderr)
-        return False
-
     env_vars = load_env(env_path)
-    access_token = env_vars.get("KAKAO_ACCESS_TOKEN")
-    refresh_token = env_vars.get("KAKAO_REFRESH_TOKEN")
-    rest_api_key = env_vars.get("KAKAO_REST_API_KEY")
-    client_secret = env_vars.get("KAKAO_CLIENT_SECRET")
+
+    access_token = (os.environ.get("KAKAO_ACCESS_TOKEN") or env_vars.get("KAKAO_ACCESS_TOKEN") or "").strip()
+    refresh_token = (os.environ.get("KAKAO_REFRESH_TOKEN") or env_vars.get("KAKAO_REFRESH_TOKEN") or "").strip()
+    rest_api_key = (os.environ.get("KAKAO_REST_API_KEY") or env_vars.get("KAKAO_REST_API_KEY") or "").strip()
+    client_secret = (os.environ.get("KAKAO_CLIENT_SECRET") or env_vars.get("KAKAO_CLIENT_SECRET") or "").strip()
+
+    # 액세스 토큰이 없지만 리프레시 토큰과 REST API 키가 있는 경우 토큰 발급 시도
+    if not access_token and refresh_token and rest_api_key:
+        refreshed, new_token_or_err = refresh_kakao_token(env_path, rest_api_key, refresh_token, client_secret)
+        if refreshed:
+            access_token = new_token_or_err
+        else:
+            print(f"\n❌ [카카오톡 알림 전송 실패] 카카오 토큰 자동 발급 실패: {new_token_or_err}", file=sys.stderr)
+            return False
 
     if not access_token:
-        print("\n❌ [카카오톡 알림 전송 실패] .env 파일에 'KAKAO_ACCESS_TOKEN'이 설정되어 있지 않습니다.", file=sys.stderr)
+        if not os.path.exists(env_path):
+            print("\n❌ [카카오톡 알림 전송 실패] 프로젝트 폴더에서 .env 파일 또는 카카오 환경변수를 찾을 수 없습니다.", file=sys.stderr)
+            print(f"   • 예상 경로: {env_path}", file=sys.stderr)
+        else:
+            print("\n❌ [카카오톡 알림 전송 실패] 'KAKAO_ACCESS_TOKEN'이 설정되어 있지 않습니다.", file=sys.stderr)
         return False
 
     title = top1.get("title", "농심 신라면 20개입")
